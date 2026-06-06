@@ -42,7 +42,7 @@ class ICountClient {
             'start_date'   => $fromDate,
             'end_date'     => $toDate,
             'doctype'      => $doctype,
-            'detail_level' => 2,
+            'detail_level' => 10,
             'max_results'  => 100,
             'limit'        => 100,
             'offset'       => $offset,
@@ -79,18 +79,31 @@ class ICountClient {
             $total = (int)($data['results_count'] ?? 0);
         } while ($offset < $total && $offset < 1000);
 
-        // כנס כל עסקה לפי הקורס המתאים
+        // בנה מפה של payment_page_id → course
+        $courseByPageId = [];
+        foreach ($courses as $course) {
+            $courseByPageId[$course['icount_payment_page_id']] = $course;
+        }
+
+        // כנס כל עסקה לפי cc_page_id
         foreach ($allDocs as $tx) {
+            // שלוף את ה-cc_page_id מתוך custom
+            $pageId = $tx['custom']['cc_page_id'] ?? null;
+
+            // אם אין cc_page_id — דלג
+            if (!$pageId) continue;
+
+            // מצא את הקורס המתאים
+            if (!isset($courseByPageId[$pageId])) continue;
+
+            $course = $courseByPageId[$pageId];
             $amount = (float)($tx['totalwithvat'] ?? $tx['paid'] ?? 0);
             if ($amount <= 0) continue;
 
-            $uniqueId    = 'invrec_' . ($tx['docnum'] ?? '');
-            $buyerName   = $tx['client_name'] ?? '';
-            $buyerEmail  = $tx['email'] ?? '';
-            $txDate      = $tx['dateissued'] ?? date('Y-m-d');
-
-            // שייך לקורס הראשון הפעיל (ניתן לשפר בעתיד עם שיוך ידני)
-            $course = $courses[0];
+            $uniqueId   = 'invrec_' . ($tx['docnum'] ?? '');
+            $buyerName  = $tx['client_name'] ?? '';
+            $buyerEmail = $tx['email'] ?? '';
+            $txDate     = $tx['dateissued'] ?? date('Y-m-d');
 
             $stmt = $db->prepare("
                 INSERT IGNORE INTO purchases
