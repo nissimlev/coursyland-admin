@@ -11,7 +11,7 @@ header('Content-Type: application/json; charset=utf-8');
 $body = json_encode([
     'start_date'   => date('Y-m-d', strtotime('-90 days')),
     'end_date'     => date('Y-m-d'),
-    'doctype'      => 'receipt',
+    'doctype'      => 'invrec',
     'detail_level' => 2,
     'max_results'  => 5,
 ]);
