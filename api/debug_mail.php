@@ -5,7 +5,6 @@ require_once __DIR__ . '/../config.php';
 startSession();
 if (!isLoggedIn()) { die('Unauthorized'); }
 
-// טען PHPMailer
 $autoloadPaths = [
     __DIR__ . '/../../vendor/autoload.php',
     __DIR__ . '/../vendor/autoload.php',
@@ -20,29 +19,28 @@ use PHPMailer\PHPMailer\Exception as MailException;
 
 header('Content-Type: text/plain; charset=utf-8');
 
-echo "GMAIL_USER: " . GMAIL_USER . "\n";
-echo "APP_PASSWORD length: " . strlen(GMAIL_APP_PASSWORD) . " chars\n";
-echo "APP_PASSWORD (masked): " . substr(GMAIL_APP_PASSWORD, 0, 4) . "****\n\n";
+echo "BREVO_SMTP_LOGIN: " . BREVO_SMTP_LOGIN . "\n";
+echo "BREVO_SMTP_KEY length: " . strlen(BREVO_SMTP_KEY) . " chars\n\n";
 
 $mail = new PHPMailer(true);
-$mail->SMTPDebug = SMTP::DEBUG_SERVER;
+$mail->SMTPDebug  = SMTP::DEBUG_SERVER;
 $mail->Debugoutput = function($str, $level) { echo $str . "\n"; };
 
 try {
     $mail->isSMTP();
-    $mail->Host       = 'smtp.gmail.com';
+    $mail->Host       = 'smtp-relay.brevo.com';
     $mail->SMTPAuth   = true;
-    $mail->Username   = GMAIL_USER;
-    $mail->Password   = GMAIL_APP_PASSWORD;
+    $mail->Username   = BREVO_SMTP_LOGIN;
+    $mail->Password   = BREVO_SMTP_KEY;
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
     $mail->Port       = 587;
     $mail->CharSet    = 'UTF-8';
 
     $mail->setFrom(GMAIL_USER, 'CoursyLand Test');
-    $mail->addAddress(GMAIL_USER); // שלח לעצמך
+    $mail->addAddress(GMAIL_USER);
 
-    $mail->Subject = 'Test CoursyLand';
-    $mail->Body    = 'בדיקת שליחת מייל מ-CoursyLand Admin';
+    $mail->Subject = 'Test CoursyLand - Brevo';
+    $mail->Body    = 'בדיקת שליחת מייל מ-CoursyLand Admin דרך Brevo';
 
     $mail->send();
     echo "\n✅ מייל נשלח בהצלחה!";

@@ -21,10 +21,10 @@ function sendReportEmail(string $toEmail, string $toName, string $subject, strin
 
     try {
         $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
+        $mail->Host       = 'smtp-relay.brevo.com';
         $mail->SMTPAuth   = true;
-        $mail->Username   = GMAIL_USER;
-        $mail->Password   = GMAIL_APP_PASSWORD;
+        $mail->Username   = BREVO_SMTP_LOGIN;
+        $mail->Password   = BREVO_SMTP_KEY;
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = 587;
         $mail->CharSet    = 'UTF-8';
