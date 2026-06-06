@@ -4,108 +4,113 @@ require_once __DIR__ . '/../config.php';
 class ICountClient {
 
     private string $apiKey;
-    private string $companyId;
     private string $baseUrl = 'https://api.icount.co.il/api/v3.php';
 
     public function __construct() {
-        $this->apiKey    = ICOUNT_API_KEY;
-        $this->companyId = ICOUNT_COMPANY_ID;
+        $this->apiKey = ICOUNT_API_KEY;
     }
 
-    private function request(string $endpoint, array $params = []): array {
-        $params['api_key'] = $this->apiKey;
-        $params['cid']     = $this->companyId;
-
+    private function request(string $endpoint, array $body = []): array {
         $url = $this->baseUrl . '/' . ltrim($endpoint, '/');
-        $ch  = curl_init();
+
+        $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => $url,
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query($params),
+            CURLOPT_POSTFIELDS     => json_encode($body),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 30,
             CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $this->apiKey,
+                'Content-Type: application/json',
+            ],
         ]);
+
         $response = curl_exec($ch);
         $err      = curl_error($ch);
         curl_close($ch);
 
-        if ($err) {
-            throw new RuntimeException("iCount cURL error: $err");
-        }
+        if ($err) throw new RuntimeException("iCount cURL error: $err");
 
         $data = json_decode($response, true);
-        if (!$data) {
-            throw new RuntimeException("iCount returned invalid JSON");
-        }
+        if (!$data) throw new RuntimeException("iCount returned invalid JSON: $response");
+
         return $data;
     }
 
     /**
-     * שליפת עסקאות לפי דף תשלום וטווח תאריכים
+     * שליפת עסקאות לפי טווח תאריכים
      */
-    public function getTransactions(string $paymentPageId, string $fromDate, string $toDate): array {
-        $data = $this->request('doc/getList', [
-            'payment_page_id' => $paymentPageId,
-            'date_from'       => $fromDate,
-            'date_to'         => $toDate,
-            'doc_type'        => 320,  // קבלה/חשבונית מס
+    public function getTransactions(string $fromDate, string $toDate, string $doctype = 'receipt'): array {
+        $data = $this->request('doc/search', [
+            'start_date'  => $fromDate,
+            'end_date'    => $toDate,
+            'doctype'     => $doctype,
+            'detail_level' => 10,
+            'max_results' => 1000,
+            'sort_field'  => 'dateissued',
+            'sort_order'  => 'DESC',
         ]);
 
-        if (empty($data['status']) || $data['status'] !== 'success') {
-            // החזר מערך ריק אם אין תוצאות (לא שגיאה)
-            return [];
-        }
-
-        return $data['list'] ?? [];
+        if (empty($data['results_list'])) return [];
+        return $data['results_list'];
     }
 
     /**
-     * סנכרון כל הקורסים הפעילים ממסד הנתונים
+     * סנכרון כל הקורסים — שולף עסקאות ומתאים לפי payment_page_id
      */
     public function syncAllCourses(\PDO $db): array {
         $courses = $db->query("SELECT * FROM courses WHERE status='active'")->fetchAll(\PDO::FETCH_ASSOC);
+
+        if (empty($courses)) return ['inserted' => 0, 'skipped' => 0, 'errors' => ['אין קורסים פעילים']];
+
+        // שלוף את כל העסקאות מ-30 יום אחרונים
+        $fromDate = date('Y-m-d', strtotime('-30 days'));
+        $toDate   = date('Y-m-d');
 
         $inserted = 0;
         $skipped  = 0;
         $errors   = [];
 
-        foreach ($courses as $course) {
-            try {
-                // שלוף עסקאות מה-30 ימים האחרונים (או ניתן להרחיב)
-                $fromDate = date('Y-m-d', strtotime('-30 days'));
-                $toDate   = date('Y-m-d');
+        // נסה doctypes שונים
+        $doctypes = ['receipt', 'invrec', 'invoice'];
 
-                $transactions = $this->getTransactions(
-                    $course['icount_payment_page_id'],
-                    $fromDate,
-                    $toDate
-                );
+        foreach ($doctypes as $doctype) {
+            try {
+                $transactions = $this->getTransactions($fromDate, $toDate, $doctype);
 
                 foreach ($transactions as $tx) {
-                    $transactionId  = (string)($tx['doc_id'] ?? $tx['id'] ?? '');
-                    $buyerName      = trim(($tx['client_name'] ?? '') ?: ($tx['name'] ?? ''));
-                    $buyerEmail     = trim($tx['email'] ?? '');
-                    $amount         = (float)($tx['total'] ?? $tx['amount'] ?? 0);
-                    $purchaseDate   = $tx['doc_date'] ?? $tx['date'] ?? date('Y-m-d H:i:s');
+                    $txId       = (string)($tx['docnum'] ?? '');
+                    $txDoctype  = $tx['doctype'] ?? $doctype;
+                    $uniqueId   = $txDoctype . '_' . $txId;
+                    $amount     = (float)($tx['totalwithvat'] ?? $tx['paid'] ?? 0);
+                    $clientName = $tx['client_name'] ?? '';
+                    $clientEmail = $tx['email'] ?? '';
+                    $txDate     = $tx['dateissued'] ?? date('Y-m-d');
 
-                    if (!$transactionId || $amount <= 0) continue;
+                    if (!$txId || $amount <= 0) continue;
 
-                    $stmt = $db->prepare("
-                        INSERT IGNORE INTO purchases
-                            (course_id, icount_transaction_id, buyer_name, buyer_email, amount, purchase_date)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ");
-                    $affected = $stmt->execute([$course['id'], $transactionId, $buyerName, $buyerEmail, $amount, $purchaseDate]);
+                    // התאם לקורס לפי payment_page_id — כרגע נכניס לפי הקורס הראשון של הלקוח
+                    // בעתיד ניתן להוסיף שדה custom לקישור
+                    foreach ($courses as $course) {
+                        $stmt = $db->prepare("
+                            INSERT IGNORE INTO purchases
+                                (course_id, icount_transaction_id, buyer_name, buyer_email, amount, purchase_date)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ");
+                        $stmt->execute([$course['id'], $uniqueId, $clientName, $clientEmail, $amount, $txDate]);
 
-                    if ($stmt->rowCount() > 0) {
-                        $inserted++;
-                    } else {
-                        $skipped++;
+                        if ($stmt->rowCount() > 0) {
+                            $inserted++;
+                        } else {
+                            $skipped++;
+                        }
+                        break; // רק לקורס אחד
                     }
                 }
             } catch (\Exception $e) {
-                $errors[] = "קורס {$course['name']}: " . $e->getMessage();
+                $errors[] = "doctype $doctype: " . $e->getMessage();
             }
         }
 
