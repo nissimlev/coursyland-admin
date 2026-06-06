@@ -16,12 +16,12 @@ $results = [];
 
 foreach ($courses as $course) {
     $params = [
-        'api_key'         => ICOUNT_API_KEY,
-        'cid'             => 'nissimcoach72',
-        'payment_page_id' => $course['icount_payment_page_id'],
-        'date_from'       => date('Y-m-d', strtotime('-365 days')),
-        'date_to'         => date('Y-m-d'),
-        'doc_type'        => 320,
+        'api_key'   => ICOUNT_API_KEY,
+        'cid'       => ICOUNT_COMPANY_ID,
+        'doc_type'  => 320,
+        'date_from' => date('Y-m-d', strtotime('-30 days')),
+        'date_to'   => date('Y-m-d'),
+        'limit'     => 5,
     ];
 
     // נסה כמה endpoints שונים
@@ -33,7 +33,7 @@ foreach ($courses as $course) {
 
     $ch = curl_init();
     curl_setopt_array($ch, [
-        CURLOPT_URL            => 'https://api.icount.co.il/api/v3.php/payment_page/getDocList',
+        CURLOPT_URL            => 'https://api.icount.co.il/api/v3.php/doc/getList',
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => http_build_query($params),
         CURLOPT_RETURNTRANSFER => true,
