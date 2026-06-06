@@ -33,7 +33,7 @@ foreach ($courses as $course) {
 
     $ch = curl_init();
     curl_setopt_array($ch, [
-        CURLOPT_URL            => $endpoints[0],
+        CURLOPT_URL            => 'https://api.icount.co.il/api/v3.php/payment_page/getDocList',
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => http_build_query($params),
         CURLOPT_RETURNTRANSFER => true,
