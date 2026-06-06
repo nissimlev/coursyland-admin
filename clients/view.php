@@ -65,13 +65,17 @@ $flash = getFlash();
             <p><?= escape($client['phone'] ?: '—') ?></p>
           </div>
           <div>
+            <p class="text-muted text-small">מספר ח"פ</p>
+            <p><?= escape($client['business_id'] ?: '—') ?></p>
+          </div>
+          <div>
             <p class="text-muted text-small">תאריך כניסה</p>
             <p><?= formatDate($client['join_date']) ?></p>
           </div>
           <div>
-            <p class="text-muted text-small">סוג מנוי</p>
+            <p class="text-muted text-small">סוג עוסק</p>
             <p>
-              <span class="badge badge-<?= match($client['subscription_type']) { 'enterprise' => 'purple', 'pro' => 'green', default => 'gray' } ?>">
+              <span class="badge badge-<?= $client['subscription_type'] === 'exempt' ? 'yellow' : 'purple' ?>">
                 <?= subscriptionLabel($client['subscription_type']) ?>
               </span>
             </p>
@@ -150,6 +154,7 @@ $flash = getFlash();
                   <th>עמלה</th>
                   <th>נטו</th>
                   <th>שליחה</th>
+                  <th>חשבונית</th>
                   <th>שולם</th>
                   <th></th>
                 </tr>
@@ -181,6 +186,13 @@ $flash = getFlash();
                       <?php else: ?>
                         <span class="badge badge-yellow">לא הופק</span>
                       <?php endif; ?>
+                    </td>
+                    <td>
+                      <input type="checkbox"
+                        class="invoice-checkbox"
+                        data-report-id="<?= $r['id'] ?>"
+                        <?= $r['invoice_received'] ? 'checked' : '' ?>
+                        title="חשבונית התקבלה">
                     </td>
                     <td>
                       <input type="checkbox"
@@ -231,6 +243,16 @@ $flash = getFlash();
 <div class="toast-container"></div>
 <script src="/admin/assets/script.js"></script>
 <script>
+// invoice checkboxes
+document.querySelectorAll('.invoice-checkbox').forEach(cb => {
+  cb.addEventListener('change', async function() {
+    await fetch('/admin/api/toggle_invoice.php', {
+      method: 'POST',
+      body: new URLSearchParams({ report_id: this.dataset.reportId, value: this.checked ? 1 : 0, csrf_token: '<?= csrfToken() ?>' })
+    });
+  });
+});
+
 let activeCourseId = null;
 
 function openPurchasesModal(courseId, courseName) {
