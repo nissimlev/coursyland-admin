@@ -24,16 +24,34 @@ foreach ($courses as $course) {
         'limit'     => 5,
     ];
 
-    // נסה כמה endpoints שונים
     $endpoints = [
-        'https://api.icount.co.il/api/v3.php/doc/getList',
-        'https://api.icount.co.il/api/v3.php/payment_page/getDocList',
-        'https://api.icount.co.il/api/v3.php/client/getList',
+        'https://api.icount.co.il/api/v3.php/doc/search',
+        'https://api.icount.co.il/api/v3.php/receipt/getList',
+        'https://api.icount.co.il/api/v3.php/receipt/search',
+        'https://api.icount.co.il/api/v3.php/doc/get',
     ];
+
+    $endpointResults = [];
+    foreach ($endpoints as $ep) {
+        $ch0 = curl_init();
+        curl_setopt_array($ch0, [
+            CURLOPT_URL            => $ep,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query($params),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . ICOUNT_API_KEY, 'X-API-KEY: ' . ICOUNT_API_KEY],
+        ]);
+        $r = curl_exec($ch0);
+        curl_close($ch0);
+        $decoded = json_decode($r, true);
+        $endpointResults[$ep] = $decoded['reason'] ?? $decoded['status'] ?? 'unknown';
+    }
 
     $ch = curl_init();
     curl_setopt_array($ch, [
-        CURLOPT_URL            => 'https://api.icount.co.il/api/v3.php/doc/getList',
+        CURLOPT_URL            => $endpoints[0],
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => http_build_query($params),
         CURLOPT_RETURNTRANSFER => true,
@@ -61,11 +79,9 @@ foreach ($courses as $course) {
 
     $results[] = [
         'course'           => $course['name'],
-        'payment_page_id'  => $course['icount_payment_page_id'],
         'params_sent'      => $params,
-        'curl_error'       => $err,
+        'endpoint_results' => $endpointResults,
         'post_response'    => json_decode($response, true),
-        'get_response'     => json_decode($responseGet, true),
     ];
 }
 
