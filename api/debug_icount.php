@@ -14,6 +14,7 @@ $body = json_encode([
     'doctype'      => 'invrec',
     'detail_level' => 2,
     'max_results'  => 5,
+    'limit'        => 5,
 ]);
 
 $ch = curl_init();
