@@ -17,7 +17,7 @@ $results = [];
 foreach ($courses as $course) {
     $params = [
         'api_key'         => ICOUNT_API_KEY,
-        'company_id'      => ICOUNT_COMPANY_ID,
+        'cid'             => ICOUNT_COMPANY_ID,
         'payment_page_id' => $course['icount_payment_page_id'],
         'date_from'       => date('Y-m-d', strtotime('-365 days')),
         'date_to'         => date('Y-m-d'),

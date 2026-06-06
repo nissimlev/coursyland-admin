@@ -13,8 +13,8 @@ class ICountClient {
     }
 
     private function request(string $endpoint, array $params = []): array {
-        $params['api_key']    = $this->apiKey;
-        $params['company_id'] = $this->companyId;
+        $params['api_key'] = $this->apiKey;
+        $params['cid']     = $this->companyId;
 
         $url = $this->baseUrl . '/' . ltrim($endpoint, '/');
         $ch  = curl_init();
