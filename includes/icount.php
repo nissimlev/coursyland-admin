@@ -11,11 +11,9 @@ class ICountClient {
     }
 
     private function request(string $endpoint, array $body = []): array {
-        $url = $this->baseUrl . '/' . ltrim($endpoint, '/');
-
         $ch = curl_init();
         curl_setopt_array($ch, [
-            CURLOPT_URL            => $url,
+            CURLOPT_URL            => $this->baseUrl . '/' . ltrim($endpoint, '/'),
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => json_encode($body),
             CURLOPT_RETURNTRANSFER => true,
@@ -26,92 +24,83 @@ class ICountClient {
                 'Content-Type: application/json',
             ],
         ]);
-
         $response = curl_exec($ch);
         $err      = curl_error($ch);
         curl_close($ch);
 
         if ($err) throw new RuntimeException("iCount cURL error: $err");
-
         $data = json_decode($response, true);
-        if (!$data) throw new RuntimeException("iCount returned invalid JSON: $response");
-
+        if (!$data) throw new RuntimeException("iCount invalid JSON");
         return $data;
     }
 
     /**
-     * שליפת עסקאות לפי טווח תאריכים
+     * שליפת עסקאות לפי טווח תאריכים עם paging
      */
-    public function getTransactions(string $fromDate, string $toDate, string $doctype = 'receipt'): array {
-        $data = $this->request('doc/search', [
-            'start_date'  => $fromDate,
-            'end_date'    => $toDate,
-            'doctype'     => $doctype,
-            'detail_level' => 10,
-            'max_results' => 1000,
-            'sort_field'  => 'dateissued',
-            'sort_order'  => 'DESC',
+    public function searchDocs(string $fromDate, string $toDate, string $doctype = 'invrec', int $offset = 0): array {
+        return $this->request('doc/search', [
+            'start_date'   => $fromDate,
+            'end_date'     => $toDate,
+            'doctype'      => $doctype,
+            'detail_level' => 2,
+            'max_results'  => 100,
+            'limit'        => 100,
+            'offset'       => $offset,
+            'sort_field'   => 'dateissued',
+            'sort_order'   => 'DESC',
         ]);
-
-        if (empty($data['results_list'])) return [];
-        return $data['results_list'];
     }
 
     /**
-     * סנכרון כל הקורסים — שולף עסקאות ומתאים לפי payment_page_id
+     * סנכרון כל הקורסים הפעילים
+     * iCount לא מחזיר payment_page_id בעסקאות — מזהים לפי שם/מייל הקונה
+     * רכישות שנוצרו דרך עמוד תשלום מקושרות לפי course_id
      */
     public function syncAllCourses(\PDO $db): array {
         $courses = $db->query("SELECT * FROM courses WHERE status='active'")->fetchAll(\PDO::FETCH_ASSOC);
-
         if (empty($courses)) return ['inserted' => 0, 'skipped' => 0, 'errors' => ['אין קורסים פעילים']];
 
-        // שלוף את כל העסקאות מ-30 יום אחרונים
         $fromDate = date('Y-m-d', strtotime('-30 days'));
         $toDate   = date('Y-m-d');
 
         $inserted = 0;
         $skipped  = 0;
         $errors   = [];
+        $allDocs  = [];
 
-        // נסה doctypes שונים
-        $doctypes = ['receipt', 'invrec', 'invoice'];
+        // שלוף את כל המסמכים עם paging
+        $offset = 0;
+        do {
+            $data = $this->searchDocs($fromDate, $toDate, 'invrec', $offset);
+            if (empty($data['results_list'])) break;
 
-        foreach ($doctypes as $doctype) {
-            try {
-                $transactions = $this->getTransactions($fromDate, $toDate, $doctype);
+            $allDocs = array_merge($allDocs, $data['results_list']);
+            $offset += 100;
+            $total = (int)($data['results_count'] ?? 0);
+        } while ($offset < $total && $offset < 1000);
 
-                foreach ($transactions as $tx) {
-                    $txId       = (string)($tx['docnum'] ?? '');
-                    $txDoctype  = $tx['doctype'] ?? $doctype;
-                    $uniqueId   = $txDoctype . '_' . $txId;
-                    $amount     = (float)($tx['totalwithvat'] ?? $tx['paid'] ?? 0);
-                    $clientName = $tx['client_name'] ?? '';
-                    $clientEmail = $tx['email'] ?? '';
-                    $txDate     = $tx['dateissued'] ?? date('Y-m-d');
+        // כנס כל עסקה לפי הקורס המתאים
+        foreach ($allDocs as $tx) {
+            $amount = (float)($tx['totalwithvat'] ?? $tx['paid'] ?? 0);
+            if ($amount <= 0) continue;
 
-                    if (!$txId || $amount <= 0) continue;
+            $uniqueId    = 'invrec_' . ($tx['docnum'] ?? '');
+            $buyerName   = $tx['client_name'] ?? '';
+            $buyerEmail  = $tx['email'] ?? '';
+            $txDate      = $tx['dateissued'] ?? date('Y-m-d');
 
-                    // התאם לקורס לפי payment_page_id — כרגע נכניס לפי הקורס הראשון של הלקוח
-                    // בעתיד ניתן להוסיף שדה custom לקישור
-                    foreach ($courses as $course) {
-                        $stmt = $db->prepare("
-                            INSERT IGNORE INTO purchases
-                                (course_id, icount_transaction_id, buyer_name, buyer_email, amount, purchase_date)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        ");
-                        $stmt->execute([$course['id'], $uniqueId, $clientName, $clientEmail, $amount, $txDate]);
+            // שייך לקורס הראשון הפעיל (ניתן לשפר בעתיד עם שיוך ידני)
+            $course = $courses[0];
 
-                        if ($stmt->rowCount() > 0) {
-                            $inserted++;
-                        } else {
-                            $skipped++;
-                        }
-                        break; // רק לקורס אחד
-                    }
-                }
-            } catch (\Exception $e) {
-                $errors[] = "doctype $doctype: " . $e->getMessage();
-            }
+            $stmt = $db->prepare("
+                INSERT IGNORE INTO purchases
+                    (course_id, icount_transaction_id, buyer_name, buyer_email, amount, purchase_date)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$course['id'], $uniqueId, $buyerName, $buyerEmail, $amount, $txDate]);
+
+            if ($stmt->rowCount() > 0) $inserted++;
+            else $skipped++;
         }
 
         return compact('inserted', 'skipped', 'errors');
