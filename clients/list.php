@@ -87,9 +87,17 @@ $clients = $stmt->fetchAll();
                       </span>
                     </td>
                     <td><?= $c['course_count'] ?></td>
-                    <td>
+                    <td style="display:flex;gap:6px;flex-wrap:wrap;">
                       <a href="/admin/clients/view.php?id=<?= $c['id'] ?>" class="btn btn-ghost btn-sm">צפייה</a>
                       <a href="/admin/clients/edit.php?id=<?= $c['id'] ?>" class="btn btn-outline btn-sm">עריכה</a>
+                      <form method="POST" action="/admin/api/delete_client.php" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                        <input type="hidden" name="client_id" value="<?= $c['id'] ?>">
+                        <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:none;"
+                          data-confirm="למחוק את הלקוח &quot;<?= escape(addslashes($c['name'])) ?>&quot;? כל הקורסים, הרכישות והדוחות שלו יימחקו לצמיתות!">
+                          מחק
+                        </button>
+                      </form>
                     </td>
                   </tr>
                 <?php endforeach; ?>

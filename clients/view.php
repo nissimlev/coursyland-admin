@@ -120,11 +120,31 @@ $flash = getFlash();
                         <?= $course['status'] === 'active' ? 'פעיל' : 'לא פעיל' ?>
                       </span>
                     </td>
-                    <td>
+                    <td style="display:flex;gap:6px;flex-wrap:wrap;">
                       <button class="btn btn-ghost btn-sm" onclick="openPurchasesModal(<?= $course['id'] ?>, '<?= escape(addslashes($course['name'])) ?>')">
                         רכישות
                       </button>
                       <a href="/admin/courses/edit.php?id=<?= $course['id'] ?>" class="btn btn-outline btn-sm">עריכה</a>
+                      <!-- הפוך פעיל/לא פעיל -->
+                      <form method="POST" action="/admin/api/toggle_course_status.php" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                        <input type="hidden" name="course_id" value="<?= $course['id'] ?>">
+                        <button type="submit" class="btn btn-sm"
+                          style="background:<?= $course['status']==='active' ? '#fef3c7' : '#d1fae5' ?>;color:<?= $course['status']==='active' ? '#b45309' : '#065f46' ?>;border:none;"
+                          data-confirm="<?= $course['status']==='active' ? 'להפוך את הקורס ללא פעיל?' : 'להפעיל מחדש את הקורס?' ?>">
+                          <?= $course['status']==='active' ? 'השבת' : 'הפעל' ?>
+                        </button>
+                      </form>
+                      <!-- מחיקה -->
+                      <form method="POST" action="/admin/api/delete_course.php" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+                        <input type="hidden" name="course_id" value="<?= $course['id'] ?>">
+                        <button type="submit" class="btn btn-sm"
+                          style="background:#fee2e2;color:#dc2626;border:none;"
+                          data-confirm="למחוק את הקורס &quot;<?= escape(addslashes($course['name'])) ?>&quot;? כל הרכישות שלו יימחקו לצמיתות!">
+                          מחק
+                        </button>
+                      </form>
                     </td>
                   </tr>
                 <?php endforeach; ?>
