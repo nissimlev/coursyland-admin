@@ -148,20 +148,25 @@ $years = range(date('Y'), 2024);
     /* פילטר */
     .db-filter {
       flex-shrink: 0;
-      display: flex; align-items: center; gap: 8px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
       background: #fff; border: 1px solid var(--gray-200);
       border-radius: 8px; padding: 8px 14px;
     }
-    .filter-mode-btns { display:flex; border:1px solid var(--gray-200); border-radius:6px; overflow:hidden; }
-    .filter-mode-btns a {
-      padding: 5px 14px; font-size:.8rem; font-weight:600;
-      color: var(--gray-600); background:#fff; text-decoration:none;
-      border-left: 1px solid var(--gray-200); transition: all .15s;
+    .filter-mode-btns {
+      display: flex; flex-shrink: 0;
+      border: 2px solid var(--purple); border-radius: 7px; overflow: hidden;
     }
-    .filter-mode-btns a:first-child { border-left:none; }
-    .filter-mode-btns a.active { background:var(--purple); color:#fff; }
-    .db-filter label { font-size:.8rem; color:var(--gray-500); }
-    .db-filter select.form-control { padding:4px 8px; font-size:.8rem; height:auto; }
+    .filter-mode-btns a {
+      padding: 6px 18px; font-size: .82rem; font-weight: 700;
+      color: var(--purple); background: #fff; text-decoration: none;
+      border-left: 2px solid var(--purple); transition: all .15s;
+      white-space: nowrap;
+    }
+    .filter-mode-btns a:last-child { border-left: none; }
+    .filter-mode-btns a.active { background: var(--purple); color: #fff; }
+    .filter-mode-btns a:hover:not(.active) { background: var(--purple-light); }
+    .db-filter label { font-size:.8rem; color:var(--gray-500); white-space:nowrap; flex-shrink:0; }
+    .db-filter select.form-control { padding:4px 8px; font-size:.8rem; height:auto; flex-shrink:0; }
     .period-badge {
       margin-right: auto; background: var(--purple-light);
       color: var(--purple); font-size:.8rem; font-weight:600;
