@@ -7,13 +7,13 @@ require_once __DIR__ . '/../includes/mailer.php';
 startSession();
 requireLogin();
 
-$isAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest'
-       || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json');
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     die('Method Not Allowed');
 }
+
+// הגנת CSRF
+verifyCsrf();
 
 $db       = getDB();
 $reportId = (int)($_POST['report_id'] ?? 0);
@@ -40,8 +40,10 @@ if ($ok) {
     $db->prepare("UPDATE reports SET sent_at=? WHERE id=?")->execute([date('Y-m-d H:i:s'), $reportId]);
     flashMessage('success', "הדוח נשלח בהצלחה ל-{$report['client_email']}");
 } else {
-    flashMessage('error', 'שגיאה בשליחת המייל. בדוק הגדרות Gmail.');
+    flashMessage('error', 'שגיאה בשליחת המייל. בדוק הגדרות Brevo.');
 }
 
-$returnUrl = $_POST['return_url'] ?? '/admin/reports/list.php';
-redirect($returnUrl);
+// מניעת Open Redirect — מאפשר רק URLs פנימיים
+$returnUrl = $_POST['return_url'] ?? '';
+$safe = preg_match('#^/admin/(reports/(list|view)\.php)#', $returnUrl);
+redirect($safe ? $returnUrl : '/admin/reports/list.php');

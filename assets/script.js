@@ -1,5 +1,11 @@
 /* CoursyLand Admin — Main JS */
 
+// ===== CSRF TOKEN =====
+// הטוקן מוזרק מה-PHP דרך meta tag
+function getCsrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
 // ===== TOAST =====
 function showToast(msg, type = 'success') {
   let container = document.querySelector('.toast-container');
@@ -78,7 +84,7 @@ if (clientSelect && courseSelect) {
   });
 }
 
-// ===== PAID CHECKBOX (AJAX) =====
+// ===== PAID CHECKBOX (AJAX + CSRF) =====
 document.querySelectorAll('.paid-checkbox').forEach(cb => {
   cb.addEventListener('change', async () => {
     const reportId = cb.dataset.reportId;
@@ -86,7 +92,7 @@ document.querySelectorAll('.paid-checkbox').forEach(cb => {
     const res = await fetch('/admin/api/mark_paid.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `report_id=${reportId}&is_paid=${isPaid}`,
+      body: `report_id=${reportId}&is_paid=${isPaid}&csrf_token=${encodeURIComponent(getCsrfToken())}`,
     });
     const data = await res.json();
     showToast(data.message, data.success ? 'success' : 'error');

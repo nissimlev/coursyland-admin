@@ -10,11 +10,26 @@ if (isLoggedIn()) {
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $password = $_POST['password'] ?? '';
-    if (login($password)) {
-        redirect('/admin/index.php');
+    // Rate limiting: מקסימום 5 ניסיונות בתוך 5 דקות
+    $ip       = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $attempts = $_SESSION['login_attempts'][$ip] ?? [];
+    $attempts = array_filter($attempts, fn($t) => $t > time() - 300); // שמור רק ניסיונות מ-5 דקות אחרונות
+
+    if (count($attempts) >= 5) {
+        $error = 'יותר מדי ניסיונות כניסה. נסה שוב עוד כמה דקות.';
     } else {
-        $error = 'סיסמה שגויה. נסה שוב.';
+        $password = $_POST['password'] ?? '';
+        if (login($password)) {
+            unset($_SESSION['login_attempts'][$ip]);
+            redirect('/admin/index.php');
+        } else {
+            $attempts[] = time();
+            $_SESSION['login_attempts'][$ip] = array_values($attempts);
+            $remaining = 5 - count($attempts);
+            $error = "סיסמה שגויה. נותרו {$remaining} ניסיונות.";
+            // עיכוב קל למניעת timing attacks
+            usleep(500000); // 0.5 שניות
+        }
     }
 }
 ?>
