@@ -29,7 +29,7 @@ function icountRequest(string $endpoint, array $body): array {
 // 1. שלוף פרטים מלאים של עסקה 4070 (הרכישה הטסט שלך ב-₪1)
 $docInfo = icountRequest('doc/info', [
     'doctype'       => 'invrec',
-    'docnum'        => 4070,  // מספר החשבונית של הרכישה ב-₪1
+    'docnum'        => 4106,  // מספר החשבונית של הרכישה ב-₪1
     'get_items'     => true,
     'get_payments'  => true,
     'get_pdf_link'  => false,
