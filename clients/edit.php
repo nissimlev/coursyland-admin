@@ -20,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data['name']              = trim($_POST['name'] ?? '');
     $data['email']             = trim($_POST['email'] ?? '');
     $data['phone']             = trim($_POST['phone'] ?? '');
+    $data['business_id']       = trim($_POST['business_id'] ?? '');
     $data['join_date']         = $_POST['join_date'] ?? $data['join_date'];
     $data['subscription_type'] = $_POST['subscription_type'] ?? $data['subscription_type'];
     $data['notes']             = trim($_POST['notes'] ?? '');
@@ -28,8 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) $errors[] = 'כתובת מייל לא תקינה.';
 
     if (empty($errors)) {
-        $stmt = $db->prepare("UPDATE clients SET name=?, email=?, phone=?, join_date=?, subscription_type=?, notes=? WHERE id=?");
-        $stmt->execute([$data['name'], $data['email'], $data['phone'], $data['join_date'], $data['subscription_type'], $data['notes'], $id]);
+        $stmt = $db->prepare("UPDATE clients SET name=?, email=?, phone=?, business_id=?, join_date=?, subscription_type=?, notes=? WHERE id=?");
+        $stmt->execute([$data['name'], $data['email'], $data['phone'], $data['business_id'], $data['join_date'], $data['subscription_type'], $data['notes'], $id]);
         flashMessage('success', 'הלקוח עודכן בהצלחה.');
         redirect("/admin/clients/view.php?id=$id");
     }
@@ -75,17 +76,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <input type="tel" name="phone" value="<?= escape($data['phone']) ?>" class="form-control">
             </div>
             <div class="form-group">
+              <label>מספר ח"פ / עוסק</label>
+              <input type="text" name="business_id" value="<?= escape($data['business_id'] ?? '') ?>" class="form-control" placeholder="123456789">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
               <label>תאריך כניסה ל-CoursyLand</label>
               <input type="date" name="join_date" value="<?= escape($data['join_date']) ?>" class="form-control">
             </div>
-          </div>
-          <div class="form-group">
-            <label>סוג מנוי</label>
-            <select name="subscription_type" class="form-control">
-              <?php foreach (['basic' => 'בייסיק', 'pro' => 'פרו', 'enterprise' => 'אנטרפרייז'] as $val => $label): ?>
-                <option value="<?= $val ?>" <?= $data['subscription_type'] === $val ? 'selected' : '' ?>><?= $label ?></option>
-              <?php endforeach; ?>
-            </select>
+            <div class="form-group">
+              <label>סוג עוסק</label>
+              <select name="subscription_type" class="form-control">
+                <option value="authorized" <?= ($data['subscription_type'] === 'authorized' || in_array($data['subscription_type'], ['basic','pro','enterprise'])) ? 'selected' : '' ?>>עוסק מורשה (5%)</option>
+                <option value="exempt"     <?= $data['subscription_type'] === 'exempt' ? 'selected' : '' ?>>עוסק פטור (23%)</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label>הערות</label>

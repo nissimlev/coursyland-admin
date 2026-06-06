@@ -59,10 +59,20 @@ function getFlash(): ?array {
 
 function subscriptionLabel(string $type): string {
     return match($type) {
-        'basic'      => 'בייסיק',
-        'pro'        => 'פרו',
-        'enterprise' => 'אנטרפרייז',
+        'authorized' => 'עוסק מורשה',
+        'exempt'     => 'עוסק פטור',
+        // ערכים ישנים לתאימות לאחור
+        'basic'      => 'עוסק מורשה',
+        'pro'        => 'עוסק מורשה',
+        'enterprise' => 'עוסק מורשה',
         default      => $type,
+    };
+}
+
+function subscriptionCommissionRate(string $type): float {
+    return match($type) {
+        'exempt' => 23.00,
+        default  => 5.00,   // authorized + כל ערך אחר
     };
 }
 

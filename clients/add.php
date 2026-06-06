@@ -8,23 +8,24 @@ requireLogin();
 
 $db     = getDB();
 $errors = [];
-$data   = ['name' => '', 'email' => '', 'phone' => '', 'join_date' => date('Y-m-d'), 'subscription_type' => 'basic', 'notes' => ''];
+$data   = ['name' => '', 'email' => '', 'phone' => '', 'business_id' => '', 'join_date' => date('Y-m-d'), 'subscription_type' => 'authorized', 'notes' => ''];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrf();
     $data['name']              = trim($_POST['name'] ?? '');
     $data['email']             = trim($_POST['email'] ?? '');
     $data['phone']             = trim($_POST['phone'] ?? '');
+    $data['business_id']       = trim($_POST['business_id'] ?? '');
     $data['join_date']         = $_POST['join_date'] ?? date('Y-m-d');
-    $data['subscription_type'] = $_POST['subscription_type'] ?? 'basic';
+    $data['subscription_type'] = $_POST['subscription_type'] ?? 'authorized';
     $data['notes']             = trim($_POST['notes'] ?? '');
 
     if (!$data['name'])  $errors[] = 'שם הלקוח הוא שדה חובה.';
     if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) $errors[] = 'כתובת מייל לא תקינה.';
 
     if (empty($errors)) {
-        $stmt = $db->prepare("INSERT INTO clients (name, email, phone, join_date, subscription_type, notes) VALUES (?,?,?,?,?,?)");
-        $stmt->execute([$data['name'], $data['email'], $data['phone'], $data['join_date'], $data['subscription_type'], $data['notes']]);
+        $stmt = $db->prepare("INSERT INTO clients (name, email, phone, business_id, join_date, subscription_type, notes) VALUES (?,?,?,?,?,?,?)");
+        $stmt->execute([$data['name'], $data['email'], $data['phone'], $data['business_id'], $data['join_date'], $data['subscription_type'], $data['notes']]);
         flashMessage('success', 'הלקוח נוסף בהצלחה.');
         redirect('/admin/clients/list.php');
     }
@@ -70,17 +71,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <input type="tel" name="phone" value="<?= escape($data['phone']) ?>" class="form-control">
             </div>
             <div class="form-group">
+              <label>מספר ח"פ / עוסק</label>
+              <input type="text" name="business_id" value="<?= escape($data['business_id']) ?>" class="form-control" placeholder="123456789">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
               <label>תאריך כניסה ל-CoursyLand *</label>
               <input type="date" name="join_date" value="<?= escape($data['join_date']) ?>" class="form-control" required>
             </div>
-          </div>
-          <div class="form-group">
-            <label>סוג מנוי</label>
-            <select name="subscription_type" class="form-control">
-              <?php foreach (['basic' => 'בייסיק', 'pro' => 'פרו', 'enterprise' => 'אנטרפרייז'] as $val => $label): ?>
-                <option value="<?= $val ?>" <?= $data['subscription_type'] === $val ? 'selected' : '' ?>><?= $label ?></option>
-              <?php endforeach; ?>
-            </select>
+            <div class="form-group">
+              <label>סוג עוסק</label>
+              <select name="subscription_type" class="form-control">
+                <option value="authorized" <?= $data['subscription_type'] === 'authorized' ? 'selected' : '' ?>>עוסק מורשה (5%)</option>
+                <option value="exempt"     <?= $data['subscription_type'] === 'exempt'     ? 'selected' : '' ?>>עוסק פטור (23%)</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label>הערות</label>

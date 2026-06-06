@@ -106,6 +106,7 @@ $pendingCount = $db->query("SELECT COUNT(*) FROM reports WHERE sent_at IS NULL A
                   <th>תאריך שליחה</th>
                   <th>הכנסה</th>
                   <th>נטו</th>
+                  <th>חשבונית</th>
                   <th>תשלום</th>
                   <th></th>
                 </tr>
@@ -126,6 +127,9 @@ $pendingCount = $db->query("SELECT COUNT(*) FROM reports WHERE sent_at IS NULL A
                     </td>
                     <td><?= formatMoney((float)$r['total_amount']) ?></td>
                     <td><strong><?= formatMoney((float)$r['net_amount']) ?></strong></td>
+                    <td>
+                      <input type="checkbox" class="invoice-checkbox" data-report-id="<?= $r['id'] ?>" <?= $r['invoice_received'] ? 'checked' : '' ?> title="חשבונית התקבלה">
+                    </td>
                     <td>
                       <input type="checkbox" class="paid-checkbox" data-report-id="<?= $r['id'] ?>" <?= $r['is_paid'] ? 'checked' : '' ?> title="סמן כשולם">
                     </td>
@@ -162,6 +166,18 @@ $pendingCount = $db->query("SELECT COUNT(*) FROM reports WHERE sent_at IS NULL A
 <div class="toast-container"></div>
 <script src="/admin/assets/script.js"></script>
 <script>
+// invoice received checkboxes
+document.querySelectorAll('.invoice-checkbox').forEach(cb => {
+    cb.addEventListener('change', async function() {
+        const id = this.dataset.reportId;
+        const checked = this.checked ? 1 : 0;
+        await fetch('/admin/api/toggle_invoice.php', {
+            method: 'POST',
+            body: new URLSearchParams({ report_id: id, value: checked, csrf_token: '<?= csrfToken() ?>' })
+        });
+    });
+});
+
 async function sendAllPending() {
   if (!confirm('שלח את כל הדוחות הממתינים? פעולה זו תשלח מייל לכל הלקוחות.')) return;
   const btn = document.querySelector('[onclick="sendAllPending()"]');

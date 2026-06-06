@@ -18,7 +18,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $clientId      = (int)($_POST['client_id'] ?? 0);
     $year          = (int)($_POST['year'] ?? date('Y'));
     $quarterNumber = (int)($_POST['quarter_number'] ?? 1);
-    $commRate      = (float)($_POST['commission_rate'] ?? 5.00);
+
+    // שלוף עמלה לפי סוג לקוח (אלא אם הוזן ידנית)
+    $commRate = (float)($_POST['commission_rate'] ?? 0);
+    if ($commRate <= 0 && $clientId) {
+        $clientTypeStmt = $db->prepare("SELECT subscription_type FROM clients WHERE id=?");
+        $clientTypeStmt->execute([$clientId]);
+        $clientType = $clientTypeStmt->fetchColumn();
+        $commRate = subscriptionCommissionRate($clientType ?: 'authorized');
+    }
 
     if (!$clientId)      $errors[] = 'בחר לקוח.';
     if ($year < 2020)    $errors[] = 'שנה לא תקינה.';
@@ -150,8 +158,8 @@ $currentQ = currentQuarter();
           </div>
           <div class="form-group">
             <label>אחוז עמלה (%)</label>
-            <input type="number" step="0.01" name="commission_rate" value="5.00" class="form-control">
-            <div class="text-muted text-small mt-1">5% לעוסק מורשה | 23% לעוסק פטור</div>
+            <input type="number" step="0.01" name="commission_rate" id="commission_rate" value="5.00" class="form-control">
+            <div class="text-muted text-small mt-1">מתעדכן אוטומטית לפי סוג הלקוח · 5% מורשה | 23% פטור</div>
           </div>
           <div style="display:flex;gap:10px;">
             <button type="submit" class="btn btn-primary">הפק דוח PDF</button>
@@ -163,5 +171,19 @@ $currentQ = currentQuarter();
   </div>
 </div>
 <script src="/admin/assets/script.js"></script>
+<script>
+// עדכון אוטומטי של עמלה לפי סוג לקוח
+const clientRates = <?= json_encode(
+    array_column(
+        $db->query("SELECT id, subscription_type FROM clients")->fetchAll(PDO::FETCH_ASSOC),
+        'subscription_type', 'id'
+    )
+) ?>;
+
+document.querySelector('[name=client_id]').addEventListener('change', function() {
+    const type = clientRates[this.value] || 'authorized';
+    document.getElementById('commission_rate').value = (type === 'exempt') ? '23.00' : '5.00';
+});
+</script>
 </body>
 </html>
