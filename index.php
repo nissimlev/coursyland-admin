@@ -72,34 +72,96 @@ foreach ($byTypeData as $type => $amount) {
 }
 $totalNet = $totalGross - $totalCommission;
 
-// ===== נתוני גרף =====
-// לפי מצב פילטר: חודש→ לפי יום | רבעון/שנה→ לפי חודש
-if ($filterMode === 'month') {
-    // לפי ימים
-    $chartData = $db->prepare("
-        SELECT DATE_FORMAT(purchase_date,'%d/%m') as label,
-               COALESCE(SUM(amount),0) as total
-        FROM purchases
-        WHERE purchase_date BETWEEN ? AND ?
-        GROUP BY DATE(purchase_date)
-        ORDER BY DATE(purchase_date)
-    ");
-    $chartData->execute([$ps, $pe]);
-} else {
-    // לפי חודשים
-    $chartData = $db->prepare("
-        SELECT DATE_FORMAT(purchase_date,'%m/%Y') as label,
-               COALESCE(SUM(amount),0) as total
-        FROM purchases
-        WHERE purchase_date BETWEEN ? AND ?
-        GROUP BY YEAR(purchase_date), MONTH(purchase_date)
-        ORDER BY YEAR(purchase_date), MONTH(purchase_date)
-    ");
-    $chartData->execute([$ps, $pe]);
+// ===== נתוני גרף — ציר X מלא עם כל הנקודות =====
+function buildChartData(\PDO $db, string $mode, string $periodStart, string $periodEnd, string $ps, string $pe): array {
+
+    if ($mode === 'month') {
+        // שלוף לפי יום
+        $stmt = $db->prepare("
+            SELECT DATE(purchase_date) as d, COALESCE(SUM(amount),0) as total
+            FROM purchases WHERE purchase_date BETWEEN ? AND ?
+            GROUP BY DATE(purchase_date)
+        ");
+        $stmt->execute([$ps, $pe]);
+        $raw = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        // מלא כל ימי החודש
+        $labels = []; $values = [];
+        $cur = new DateTime($periodStart);
+        $end = new DateTime($periodEnd);
+        while ($cur <= $end) {
+            $key = $cur->format('Y-m-d');
+            $labels[] = $cur->format('d/m');
+            $values[] = (float)($raw[$key] ?? 0);
+            $cur->modify('+1 day');
+        }
+
+    } elseif ($mode === 'quarter') {
+        // שלוף לפי שבוע (YEARWEEK)
+        $stmt = $db->prepare("
+            SELECT YEARWEEK(purchase_date,1) as yw, MIN(DATE(purchase_date)) as week_start,
+                   COALESCE(SUM(amount),0) as total
+            FROM purchases WHERE purchase_date BETWEEN ? AND ?
+            GROUP BY YEARWEEK(purchase_date,1)
+            ORDER BY yw
+        ");
+        $stmt->execute([$ps, $pe]);
+        $raw = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $raw[$r['yw']] = ['start' => $r['week_start'], 'total' => (float)$r['total']];
+        }
+
+        // בנה את כל השבועות בתקופה
+        $labels = []; $values = [];
+        $cur = new DateTime($periodStart);
+        $cur->modify('Monday this week'); // התחל מהשני של השבוע
+        $end = new DateTime($periodEnd);
+        while ($cur <= $end) {
+            $yw  = $cur->format('oW'); // ISO year+week
+            $lbl = $cur->format('d/m');
+            $labels[] = $lbl;
+            $values[] = isset($raw[$yw]) ? $raw[$yw]['total'] : 0.0;
+            $cur->modify('+1 week');
+        }
+
+    } else {
+        // שנה — לפי חודשים
+        $stmt = $db->prepare("
+            SELECT YEAR(purchase_date) as y, MONTH(purchase_date) as m,
+                   COALESCE(SUM(amount),0) as total
+            FROM purchases WHERE purchase_date BETWEEN ? AND ?
+            GROUP BY y, m ORDER BY y, m
+        ");
+        $stmt->execute([$ps, $pe]);
+        $raw = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $raw[$r['y'] . '-' . str_pad($r['m'], 2, '0', STR_PAD_LEFT)] = (float)$r['total'];
+        }
+
+        $heMonths = ['','ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצמ'];
+        $labels = []; $values = [];
+        $startY = (int)date('Y', strtotime($periodStart));
+        $endY   = (int)date('Y', strtotime($periodEnd));
+        $startM = (int)date('n', strtotime($periodStart));
+        $endM   = (int)date('n', strtotime($periodEnd));
+        for ($y = $startY; $y <= $endY; $y++) {
+            $mFrom = ($y === $startY) ? $startM : 1;
+            $mTo   = ($y === $endY)   ? $endM   : 12;
+            for ($m = $mFrom; $m <= $mTo; $m++) {
+                $key = $y . '-' . str_pad($m, 2, '0', STR_PAD_LEFT);
+                $labels[] = $heMonths[$m] . ' ' . $y;
+                $values[] = $raw[$key] ?? 0.0;
+            }
+        }
+    }
+
+    return ['labels' => $labels, 'values' => $values];
 }
-$chartRows   = $chartData->fetchAll();
-$chartLabels = json_encode(array_column($chartRows, 'label'));
-$chartValues = json_encode(array_map('floatval', array_column($chartRows, 'total')));
+
+$chartResult = buildChartData($db, $filterMode, $periodStart, $periodEnd, $ps, $pe);
+$chartLabels = json_encode($chartResult['labels']);
+$chartValues = json_encode($chartResult['values']);
+$hasChartData = array_sum($chartResult['values']) > 0;
 
 // ===== 5 לקוחות מובילים =====
 $topClients = $db->prepare("
@@ -279,10 +341,10 @@ $years = range(date('Y'), 2024);
       <!-- ===== גרף מכירות ===== -->
       <div class="chart-card">
         <h3>📊 מכירות לפי סכום — <?= escape($periodLabel) ?></h3>
-        <?php if (empty($chartRows)): ?>
+        <?php if (!$hasChartData): ?>
           <div class="empty-state"><p>אין נתונים לתקופה זו</p></div>
         <?php else: ?>
-          <canvas id="salesChart" height="80"></canvas>
+          <canvas id="salesChart" height="70"></canvas>
         <?php endif; ?>
       </div>
 
@@ -383,43 +445,59 @@ $years = range(date('Y'), 2024);
 </div>
 <div class="toast-container"></div>
 <script src="/admin/assets/script.js"></script>
-<?php if (!empty($chartRows)): ?>
+<?php if ($hasChartData): ?>
 <script>
 const ctx = document.getElementById('salesChart').getContext('2d');
+
+// גרדיאנט סגול
+const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+gradient.addColorStop(0, 'rgba(124, 58, 237, 0.25)');
+gradient.addColorStop(1, 'rgba(124, 58, 237, 0.0)');
+
 new Chart(ctx, {
-  type: 'bar',
+  type: 'line',
   data: {
     labels: <?= $chartLabels ?>,
     datasets: [{
       label: 'מכירות (₪)',
       data: <?= $chartValues ?>,
-      backgroundColor: 'rgba(124, 58, 237, 0.15)',
-      borderColor: 'rgba(124, 58, 237, 0.85)',
-      borderWidth: 2,
-      borderRadius: 6,
-      hoverBackgroundColor: 'rgba(124, 58, 237, 0.3)',
+      borderColor: 'rgba(124, 58, 237, 1)',
+      borderWidth: 2.5,
+      backgroundColor: gradient,
+      fill: true,
+      tension: 0.4,
+      pointBackgroundColor: 'rgba(124, 58, 237, 1)',
+      pointRadius: <?= $filterMode === 'year' ? 5 : ($filterMode === 'quarter' ? 5 : 3) ?>,
+      pointHoverRadius: 7,
+      pointBorderColor: '#fff',
+      pointBorderWidth: 2,
     }]
   },
   options: {
     responsive: true,
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { display: false },
       tooltip: {
+        rtl: true,
         callbacks: {
-          label: ctx => '₪' + ctx.parsed.y.toLocaleString('he-IL', {minimumFractionDigits:2})
+          label: ctx => ' ₪' + ctx.parsed.y.toLocaleString('he-IL', {minimumFractionDigits: 2})
         }
       }
     },
     scales: {
       y: {
         beginAtZero: true,
-        ticks: {
-          callback: val => '₪' + val.toLocaleString('he-IL')
-        },
+        ticks: { callback: val => '₪' + val.toLocaleString('he-IL') },
         grid: { color: 'rgba(0,0,0,0.05)' }
       },
       x: {
-        grid: { display: false }
+        grid: { display: false },
+        ticks: {
+          maxRotation: 45,
+          autoSkip: true,
+          maxTicksLimit: <?= $filterMode === 'month' ? 31 : ($filterMode === 'quarter' ? 14 : 12) ?>
+        }
       }
     }
   }
